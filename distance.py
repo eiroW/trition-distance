@@ -33,12 +33,12 @@ class ChamferDistance(torch.autograd.Function):
         x, y, indices = ctx.saved_tensors
         grad_y = torch.zeros_like(y)
         
-        y = y[:,indices,:]
+        y = torch.gather(y,1,indices[...,None].expand(-1,-1,y.shape[2]))
         if ctx.squared:
             grad_x = (x-y)*grad_output[...,None]
             grad_y[:,indices,:] = -grad_x
         else:
-            grad_x = (x-y)*(grad_output[...,None]/(2*torch.sqrt(grad_output[...,None])))
+            grad_x = (x-y)*(grad_output[...,None]/torch.norm(x-y,dim=-1,keepdim=True))
             grad_y[:,indices,:] = -grad_x
         return grad_x, grad_y, None
     
@@ -89,18 +89,20 @@ class BundleDistance(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         x, y, indices,flip = ctx.saved_tensors
+        B, N, P, ndim = x.shape
         grad_y = torch.zeros_like(y)
-        y = y[:,indices]
+        y = torch.gather(y,1,indices[...,None,None].expand(-1,-1,y.shape[2],y.shape[3]))
         y = torch.where(flip[...,None,None],y.flip(2),y)
         if ctx.squared:
-            grad_x = (x-y)*grad_output[...,None]
+            grad_x = (x-y)*grad_output[...,None,None]
             grad_y[:,indices] = torch.where(flip[...,None,None], -grad_x.flip(2), -grad_x)
         else:
-            raise NotImplementedError()
+            grad_x = (x-y)*grad_output[...,None,None]/torch.norm(x-y,dim=-1,keepdim=True)/P
+            grad_y[:,indices] = torch.where(flip[...,None,None], -grad_x.flip(2), -grad_x)
         return grad_x, grad_y, None
 def bundle_distance(x: torch.Tensor, y: torch.Tensor, squared: bool = False):
     """
-    Calculates the bundle distance between two bundles with same points on streamline.
+    Minimum average Direct-Flip (MDF) streamline distances (Garyfallidis et al., 2012).
 
     Args:
         x (torch.Tensor): The first bundle with the shape (B, N, P, ndim).

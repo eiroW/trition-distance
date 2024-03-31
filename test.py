@@ -28,8 +28,8 @@ def benchmark(N, provider):
 # benchmark.run(print_data=True)
 
 def unit_test():
-    N = 10000
-    M = 10000
+    N = 1024
+    M = 1024
     P = 16
     B = 4
     device = torch.device("cuda:2")
